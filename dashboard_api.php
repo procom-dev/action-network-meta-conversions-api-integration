@@ -117,14 +117,18 @@ function parseLogFiles($logDir) {
     
     // Parse Meta payload debug log
     $debugLogPath = $logDir . '/meta_payload_debug.log';
-    if (file_exists($debugLogPath)) {
+    $debugHasData = false;
+    if (file_exists($debugLogPath) && filesize($debugLogPath) > 0) {
         $debugStats = parseMetaPayloadDebugLog($debugLogPath, $dashboardEmailMap);
-        $stats = array_merge_recursive($stats, $debugStats);
+        if (!empty($debugStats['recentCalls'])) {
+            $stats = array_merge_recursive($stats, $debugStats);
+            $debugHasData = true;
+        }
     }
     
-    // Parse main app log only if debug log is empty/missing
+    // Parse main app log if debug log is empty/missing or has no data
     $appLogPath = $logDir . '/app.log';
-    if (file_exists($appLogPath) && empty($stats['recentCalls'])) {
+    if (file_exists($appLogPath) && !$debugHasData) {
         $appStats = parseAppLog($appLogPath);
         $stats = array_merge_recursive($stats, $appStats);
     }
@@ -372,61 +376,42 @@ function parseAppLog($logPath) {
     $recentLines = array_slice($lines, -1000);
     
     foreach ($recentLines as $line) {
-        if (preg_match('/\[([^\]]+)\] \[([^\]]+)\] (.+)/', $line, $matches)) {
-            $timestamp = $matches[1];
-            $level = $matches[2];
-            $message = $matches[3];
+        // Try to parse as JSON first (our current format)
+        $logData = json_decode($line, true);
+        if ($logData && isset($logData['timestamp'], $logData['level'], $logData['message'])) {
+            $timestamp = $logData['timestamp'];
+            $level = $logData['level'];
+            $message = $logData['message'];
+            $context = $logData['context'] ?? [];
             
             // Look for successful/failed Meta API calls
             if (strpos($message, 'Successfully sent') !== false || strpos($message, 'Failed to send') !== false) {
                 $success = strpos($message, 'Successfully sent') !== false;
                 
-                // Try to extract pixel ID and event type from context
-                $pixelId = null;
-                $eventType = 'Unknown';
+                // Extract pixel ID and event type from context
+                $pixelId = $context['pixel_id'] ?? null;
+                $eventType = $context['event_type'] ?? 'Unknown';
+                $eventsReceived = $context['events_received'] ?? 1;
                 
-                if (preg_match('/pixel[_\s]*id[:\s]*([a-zA-Z0-9]+)/i', $line, $pixelMatch)) {
-                    $pixelId = $pixelMatch[1];
-                }
+                // Extract info from JSON context
+                $hasEmail = $context['has_email'] ?? false;
+                $source = $context['source'] ?? 'unknown';
+                $eventId = $context['event_id'] ?? null;
+                $hasFacebookData = !empty($context['has_fbclid']) || !empty($context['has_fbp']);
                 
-                if (preg_match('/event[_\s]*type[:\s]*([a-zA-Z0-9]+)/i', $line, $eventMatch)) {
-                    $eventType = $eventMatch[1];
-                }
-                
-                // Extract additional info from context
-                $email = 'N/A';
-                $origin = 'unknown';
-                $eventId = null;
-                if (preg_match('/Context:\s*\{([^}]+)\}/', $line, $contextMatch)) {
-                    $contextStr = '{' . $contextMatch[1] . '}';
-                    $contextData = json_decode($contextStr, true);
-                    if ($contextData) {
-                        if (isset($contextData['has_email']) && $contextData['has_email']) {
-                            $email = 'email_present';
-                        } elseif (isset($contextData['has_email']) && !$contextData['has_email']) {
-                            $email = 'no_email';
-                        }
-                        
-                        if (isset($contextData['source'])) {
-                            $origin = strpos($contextData['source'], 'webhook') !== false ? 'webhook' : 'javascript';
-                        }
-                        
-                        if (isset($contextData['event_id'])) {
-                            $eventId = $contextData['event_id'];
-                        }
-                    }
-                }
+                $origin = strpos($source, 'webhook') !== false ? 'webhook' : 'javascript';
+                $email = $hasEmail ? 'email_present' : 'no_email';
 
                 $call = [
                     'timestamp' => formatTimestamp($timestamp),
                     'eventType' => $eventType,
                     'success' => $success,
-                    'source' => 'app_log',
+                    'source' => $origin,
                     'pixelId' => $pixelId,
                     'responseTime' => 0,
-                    'eventsReceived' => 0,
+                    'eventsReceived' => $eventsReceived,
                     'userFields' => [],
-                    'hasFacebookData' => false,
+                    'hasFacebookData' => $hasFacebookData,
                     'httpCode' => $success ? 200 : null,
                     'error' => $success ? null : 'Check error logs for details',
                     'eventId' => $eventId,
@@ -440,8 +425,60 @@ function parseAppLog($logPath) {
                 // Count event types
                 $stats['eventTypes'][$eventType] = ($stats['eventTypes'][$eventType] ?? 0) + 1;
             }
+        } else {
+            // Fallback: try to parse old format [timestamp] [level] message
+            if (preg_match('/\[([^\]]+)\] \[([^\]]+)\] (.+)/', $line, $matches)) {
+                $timestamp = $matches[1];
+                $level = $matches[2];
+                $message = $matches[3];
+                
+                // Look for successful/failed Meta API calls
+                if (strpos($message, 'Successfully sent') !== false || strpos($message, 'Failed to send') !== false) {
+                    $success = strpos($message, 'Successfully sent') !== false;
+                    
+                    // Try to extract basic info
+                    $pixelId = null;
+                    $eventType = 'Unknown';
+                    
+                    if (preg_match('/pixel[_\s]*id[:\s]*([a-zA-Z0-9]+)/i', $line, $pixelMatch)) {
+                        $pixelId = $pixelMatch[1];
+                    }
+                    
+                    if (preg_match('/event[_\s]*type[:\s]*([a-zA-Z0-9]+)/i', $line, $eventMatch)) {
+                        $eventType = $eventMatch[1];
+                    }
+                    
+                    $call = [
+                        'timestamp' => formatTimestamp($timestamp),
+                        'eventType' => $eventType,
+                        'success' => $success,
+                        'source' => 'unknown',
+                        'pixelId' => $pixelId,
+                        'responseTime' => 0,
+                        'eventsReceived' => 1,
+                        'userFields' => [],
+                        'hasFacebookData' => false,
+                        'httpCode' => $success ? 200 : null,
+                        'error' => $success ? null : 'Check error logs for details',
+                        'eventId' => null,
+                        'email' => 'N/A',
+                        'formUrl' => null,
+                        'origin' => 'unknown'
+                    ];
+                    
+                    $stats['recentCalls'][] = $call;
+                    $stats['eventTypes'][$eventType] = ($stats['eventTypes'][$eventType] ?? 0) + 1;
+                }
+            }
         }
     }
+    
+    // Add summary stats
+    $stats['totalCount'] = count($stats['recentCalls']);
+    $stats['successCount'] = count(array_filter($stats['recentCalls'], function($call) {
+        return $call['success'];
+    }));
+    $stats['eventsReceived'] = array_sum(array_column($stats['recentCalls'], 'eventsReceived'));
     
     return $stats;
 }

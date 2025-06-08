@@ -8,8 +8,10 @@
 session_start();
 
 // Include required files
-require_once __DIR__ . '/crypto.php';
-require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/includes/crypto.php';
+require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/error_handler.php';
+require_once __DIR__ . '/includes/helpers.php';
 
 // Initialize crypto system
 initCrypto();
@@ -515,11 +517,11 @@ initCrypto();
                     </div>
                 </div>
 
-                <!-- Step 2: Webhook URL -->
+                <!-- Step 2: Configure & Test Webhook -->
                 <div class="step" id="step2">
                     <h2 class="step-title">
                         <span class="step-number">2</span>
-                        Configure Webhook
+                        Configure & Test Webhook
                     </h2>
 
                     <div class="pixel-info" id="pixelInfo">
@@ -528,7 +530,7 @@ initCrypto();
                     </div>
 
                     <div class="step-description">
-                        Copy this webhook URL and add it to your Action Network account to start tracking form submissions.
+                        Copy this webhook URL, add it to your Action Network account, and test it.
                     </div>
 
                     <div class="code-block">
@@ -537,7 +539,7 @@ initCrypto();
                     </div>
 
                     <div class="help-text">
-                        <strong>How to add this webhook in Action Network:</strong>
+                        <strong>How to add and test this webhook:</strong>
                         <ol style="margin-left: 20px; margin-top: 8px;">
                             <li>Log in to your Action Network account</li>
                             <li>Go to <strong>Start Organizing → Details</strong></li>
@@ -547,44 +549,14 @@ initCrypto();
                             <li>Select <strong>All Actions</strong> for events</li>
                             <li>Set status to <strong>Active</strong></li>
                             <li>Click <strong>Add Webhook</strong></li>
-                        </ol>
-                    </div>
-
-                    <div class="button-group">
-                        <button class="button button-secondary" onclick="previousStep()">
-                            ← Back
-                        </button>
-                        <button class="button" onclick="nextStep()">
-                            Continue
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Step 3: Test Webhook -->
-                <div class="step" id="step3">
-                    <h2 class="step-title">
-                        <span class="step-number">3</span>
-                        Test Your Webhook
-                    </h2>
-
-                    <div class="step-description">
-                        Let's verify that your webhook is working correctly by sending a test from Action Network.
-                    </div>
-
-                    <div class="help-text">
-                        <strong>How to send a test webhook:</strong>
-                        <ol style="margin-left: 20px; margin-top: 8px;">
-                            <li>In Action Network, go to your webhooks list</li>
-                            <li>Find the webhook you just added</li>
-                            <li>Click the <strong>Send Test</strong> button</li>
-                            <li>Wait for confirmation below</li>
+                            <li><strong>Click "Send Test"</strong> to verify it's working</li>
                         </ol>
                     </div>
 
                     <div class="test-status pulse" id="testStatus">
                         <div class="test-waiting">
                             <strong>Waiting for test webhook...</strong><br>
-                            Click "Send Test" in Action Network
+                            After adding the webhook, click "Send Test" in Action Network
                             <span class="loading"></span>
                         </div>
                     </div>
@@ -599,10 +571,10 @@ initCrypto();
                     </div>
                 </div>
 
-                <!-- Step 4: Add fbclid Field -->
-                <div class="step" id="step4">
+                <!-- Step 3: Add fbclid Field -->
+                <div class="step" id="step3">
                     <h2 class="step-title">
-                        <span class="step-number">4</span>
+                        <span class="step-number">3</span>
                         Add Facebook Click ID Field
                     </h2>
 
@@ -653,10 +625,10 @@ initCrypto();
                     </div>
                 </div>
 
-                <!-- Step 5: Tracking Script -->
-                <div class="step" id="step5">
+                <!-- Step 4: Tracking Script -->
+                <div class="step" id="step4">
                     <h2 class="step-title">
-                        <span class="step-number">5</span>
+                        <span class="step-number">4</span>
                         Add Browser Tracking Script
                     </h2>
 
@@ -701,10 +673,10 @@ initCrypto();
                     </div>
                 </div>
 
-                <!-- Step 6: Test Script -->
-                <div class="step" id="step6">
+                <!-- Step 5: Test Script -->
+                <div class="step" id="step5">
                     <h2 class="step-title">
-                        <span class="step-number">6</span>
+                        <span class="step-number">5</span>
                         Test Browser Tracking
                     </h2>
 
@@ -763,8 +735,8 @@ initCrypto();
                     </div>
                 </div>
 
-                <!-- Step 7: Complete -->
-                <div class="step" id="step7">
+                <!-- Step 6: Complete -->
+                <div class="step" id="step6">
                     <h2 class="step-title">
                         <span class="step-number active">✓</span>
                         Setup Complete!
@@ -824,7 +796,7 @@ initCrypto();
         let scriptTestCheckCount = 0;
 
         function updateProgress() {
-            const progress = (currentStep / 7) * 100;
+            const progress = (currentStep / 6) * 100;
             document.getElementById('progressBar').style.width = progress + '%';
         }
 
@@ -843,13 +815,13 @@ initCrypto();
             currentStep = step;
             updateProgress();
             
-            if (step === 3) {
+            if (step === 2) {
                 startTestPolling();
             } else if (testPollInterval) {
                 clearInterval(testPollInterval);
             }
             
-            if (step === 6) {
+            if (step === 5) {
                 startScriptTestPolling();
             } else if (scriptTestPollInterval) {
                 clearInterval(scriptTestPollInterval);
@@ -877,7 +849,7 @@ initCrypto();
             resultDiv.innerHTML = '';
             
             try {
-                const response = await fetch('verify.php', {
+                const response = await fetch('tools/verify.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -892,7 +864,7 @@ initCrypto();
                 
                 if (result.success) {
                     // Generate encrypted hash
-                    const hashResponse = await fetch('generate_hash.php', {
+                    const hashResponse = await fetch('tools/generate_hash.php', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -973,7 +945,7 @@ initCrypto();
                 testCheckCount++;
                 
                 try {
-                    const response = await fetch('check_test.php?pixel_id=' + encodeURIComponent(pixelId) + '&access_token=' + encodeURIComponent(accessToken));
+                    const response = await fetch('tools/check_test.php?pixel_id=' + encodeURIComponent(pixelId) + '&access_token=' + encodeURIComponent(accessToken));
                     
                     if (!response.ok) {
                         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -991,7 +963,7 @@ initCrypto();
                             (result.time_ago ? '<br><small>Received ' + result.time_ago + '</small>' : '');
                         
                         setTimeout(() => {
-                            showStep(4);
+                            showStep(3);
                         }, 2000);
                         return;
                     }
@@ -1033,11 +1005,11 @@ initCrypto();
             if (testPollInterval) {
                 clearInterval(testPollInterval);
             }
-            showStep(4);
+            showStep(3);
         }
 
         function nextStep() {
-            if (currentStep < 7) {
+            if (currentStep < 6) {
                 showStep(currentStep + 1);
             }
         }
@@ -1055,7 +1027,7 @@ initCrypto();
                 scriptTestCheckCount++;
                 
                 try {
-                    const response = await fetch('check_script_test.php?pixel_id=' + encodeURIComponent(pixelId) + '&access_token=' + encodeURIComponent(accessToken));
+                    const response = await fetch('tools/check_script_test.php?pixel_id=' + encodeURIComponent(pixelId) + '&access_token=' + encodeURIComponent(accessToken));
                     
                     if (!response.ok) {
                         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1071,7 +1043,7 @@ initCrypto();
                         testStatus.className = 'test-status test-success';
                         testStatus.innerHTML = '<strong>✅ Test form submission received!</strong><br>Browser tracking is working correctly with test@test.com.' + 
                             (result.time_ago ? '<br><small>Received ' + result.time_ago + '</small>' : '') +
-                            '<br><button class="button" onclick="showStep(7)" style="margin-top: 15px;">Continue to Complete Setup →</button>';
+                            '<br><button class="button" onclick="showStep(6)" style="margin-top: 15px;">Continue to Complete Setup →</button>';
                         
                         // Remove automatic redirect - let user manually continue
                         return;
@@ -1110,11 +1082,11 @@ initCrypto();
             if (scriptTestPollInterval) {
                 clearInterval(scriptTestPollInterval);
             }
-            showStep(7);
+            showStep(6);
         }
 
         function completeSetup() {
-            showStep(7);
+            showStep(6);
         }
 
         function setupAnother() {

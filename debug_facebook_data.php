@@ -3,7 +3,9 @@
  * debug_facebook_data.php - Analyze Facebook data collection from recent logs
  */
 
-require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/error_handler.php';
+require_once __DIR__ . '/includes/helpers.php';
 
 header('Content-Type: text/html; charset=utf-8');
 

@@ -7,7 +7,7 @@
 
 header('Content-Type: application/json');
 
-require_once __DIR__ . '/crypto.php';
+require_once __DIR__ . '/../includes/crypto.php';
 
 // Only accept POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

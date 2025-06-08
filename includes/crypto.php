@@ -1,19 +1,9 @@
 <?php
 /**
  * Crypto.php - Encryption/Decryption functions for Meta Conversions API Integration
- * 
- * This file handles all cryptographic operations to securely store and transmit
- * sensitive data (Pixel ID, Access Token, Event Type) without exposing them.
  */
 
 class Crypto {
-    /**
-     * Secret key for encryption - CHANGE THIS IN PRODUCTION!
-     * Should be 32 bytes (256 bits) for AES-256
-     * Generate with: bin2hex(random_bytes(32))
-     */
-    private const SECRET_KEY = 'a3f8bfc1d2e3f4a5b62c9d4e2a3b4c5d6e7f8a9b05f6a7b8c9d0e1c7d8e9f0a1';
-    
     /**
      * Algorithm for encryption
      */
@@ -25,11 +15,41 @@ class Crypto {
     private const DATA_SEPARATOR = '|';
     
     /**
+     * Configuration cache
+     */
+    private static $config = null;
+    private static $cache = [];
+    
+    /**
+     * Get configuration
+     */
+    public static function getConfig() {
+        if (self::$config === null) {
+            $configFile = __DIR__ . '/../config/settings.local.php';
+            if (!file_exists($configFile)) {
+                $configFile = __DIR__ . '/../config/settings.php';
+            }
+            self::$config = require $configFile;
+        }
+        return self::$config;
+    }
+    
+    /**
+     * Get secret key from configuration
+     */
+    private static function getSecretKey() {
+        $config = self::getConfig();
+        $key = $config['encryption_key'] ?? null;
+        
+        if (!$key || $key === 'CHANGE_THIS_TO_RANDOM_32_BYTE_HEX') {
+            throw new Exception('Encryption key not configured. Please update config/settings.local.php');
+        }
+        
+        return $key;
+    }
+    
+    /**
      * Encrypts data and returns a URL-safe hash
-     * 
-     * @param string $pixelId Meta Pixel ID
-     * @param string $accessToken Meta Access Token
-     * @return string URL-safe encrypted hash
      */
     public static function encrypt($pixelId, $accessToken) {
         try {
@@ -38,20 +58,19 @@ class Crypto {
                 throw new Exception('Pixel ID and Access Token are required');
             }
             
-            // Create data string with timestamp for added security (event type auto-detected)
-            $timestamp = time();
+            // Simple data string - NO TIMESTAMP, permanent hash
             $dataString = implode(self::DATA_SEPARATOR, [
                 $pixelId,
-                $accessToken,
-                $timestamp
+                $accessToken
             ]);
             
             // Get key as binary
-            $key = hex2bin(self::SECRET_KEY);
+            $key = hex2bin(self::getSecretKey());
             
-            // Generate random IV
+            // Generate deterministic IV based ONLY on credentials (always same IV for same credentials)
+            $ivSeed = hash('sha256', $pixelId . '|' . $accessToken, true);
             $ivLength = openssl_cipher_iv_length(self::CIPHER_METHOD);
-            $iv = openssl_random_pseudo_bytes($ivLength);
+            $iv = substr($ivSeed, 0, $ivLength);
             
             // Encrypt data
             $encrypted = openssl_encrypt(
@@ -86,12 +105,14 @@ class Crypto {
     
     /**
      * Decrypts a hash and returns the original data
-     * 
-     * @param string $hash URL-safe encrypted hash
-     * @return array|false Array with pixelId, accessToken, eventType or false on failure
      */
     public static function decrypt($hash) {
         try {
+            // Check cache first
+            if (isset(self::$cache[$hash])) {
+                return self::$cache[$hash];
+            }
+            
             // Validate input
             if (empty($hash)) {
                 throw new Exception('Empty hash provided');
@@ -104,7 +125,7 @@ class Crypto {
             }
             
             // Get key as binary
-            $key = hex2bin(self::SECRET_KEY);
+            $key = hex2bin(self::getSecretKey());
             
             // Extract HMAC (first 32 bytes)
             $hmacProvided = substr($decoded, 0, 32);
@@ -134,25 +155,25 @@ class Crypto {
                 throw new Exception('Decryption failed');
             }
             
-            // Parse decrypted data (now only pixel_id, access_token, timestamp)
+            // Parse decrypted data - NO TIMESTAMP, permanent hash
             $parts = explode(self::DATA_SEPARATOR, $decrypted);
-            if (count($parts) !== 3) {
+            if (count($parts) !== 2) {
                 throw new Exception('Invalid decrypted data format');
             }
             
-            list($pixelId, $accessToken, $timestamp) = $parts;
+            list($pixelId, $accessToken) = $parts;
             
-            // Optional: Check timestamp validity (e.g., not older than 1 year)
-            $maxAge = 365 * 24 * 60 * 60; // 1 year in seconds
-            if ((time() - $timestamp) > $maxAge) {
-                throw new Exception('Hash has expired');
-            }
+            // NO EXPIRATION CHECK - hash is permanent
             
-            return [
+            $result = [
                 'pixel_id' => $pixelId,
-                'access_token' => $accessToken,
-                'timestamp' => $timestamp
+                'access_token' => $accessToken
             ];
+            
+            // Cache result
+            self::$cache[$hash] = $result;
+            
+            return $result;
             
         } catch (Exception $e) {
             error_log('Decryption error: ' . $e->getMessage());
@@ -161,19 +182,7 @@ class Crypto {
     }
     
     /**
-     * Generates a secure random key (for initial setup)
-     * 
-     * @return string Hex-encoded 32-byte key
-     */
-    public static function generateKey() {
-        return bin2hex(random_bytes(32));
-    }
-    
-    /**
      * Quick validation of hash format without decrypting
-     * 
-     * @param string $hash
-     * @return bool
      */
     public static function isValidHashFormat($hash) {
         // Check if it's a valid base64url string
@@ -192,20 +201,13 @@ class Crypto {
     
     /**
      * Creates a test hash for wizard testing
-     * 
-     * @param string $pixelId
-     * @param string $accessToken
-     * @return string
      */
     public static function createTestHash($pixelId, $accessToken) {
-        return self::encrypt($pixelId, $accessToken, 'Test');
+        return self::encrypt($pixelId, $accessToken);
     }
     
     /**
      * Extracts just the pixel ID from a hash (for logging without exposing token)
-     * 
-     * @param string $hash
-     * @return string|false
      */
     public static function getPixelIdFromHash($hash) {
         $data = self::decrypt($hash);
@@ -214,8 +216,6 @@ class Crypto {
     
     /**
      * Get cipher method (public method for external access)
-     * 
-     * @return string
      */
     public static function getCipherMethod() {
         return self::CIPHER_METHOD;
@@ -225,8 +225,8 @@ class Crypto {
 /**
  * Helper function for quick encryption
  */
-function encryptData($pixelId, $accessToken, $eventType = 'CompleteRegistration') {
-    return Crypto::encrypt($pixelId, $accessToken, $eventType);
+function encryptData($pixelId, $accessToken) {
+    return Crypto::encrypt($pixelId, $accessToken);
 }
 
 /**
@@ -252,15 +252,3 @@ function initCrypto() {
     
     return true;
 }
-
-// Example usage (comment out in production):
-/*
-$pixelId = '123456789012345';
-$accessToken = 'EAAxxxxxxxxxxxxxxxx';
-$hash = Crypto::encrypt($pixelId, $accessToken);
-echo "Encrypted hash: " . $hash . "\n";
-
-$decrypted = Crypto::decrypt($hash);
-print_r($decrypted);
-*/
-?>

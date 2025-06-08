@@ -46,3 +46,22 @@ yarn-error.log*
 
 # Production config files that might contain secrets
 config.production.php
+
+# Configuration
+config/settings.local.php
+
+# Logs
+logs/
+*.log
+
+# Backups
+backup-*.tar.gz
+*.bak
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

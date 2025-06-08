@@ -31,9 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Include required files
-require_once __DIR__ . '/crypto.php';
-require_once __DIR__ . '/functions.php';
-require_once __DIR__ . '/debug_meta_payload.php';
+require_once __DIR__ . '/includes/crypto.php';
+require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/debug_meta_payload.php';
+require_once __DIR__ . '/includes/error_handler.php';
+require_once __DIR__ . '/includes/helpers.php';
 
 /**
  * Send JSON response and exit
@@ -109,10 +111,13 @@ $logContext = [
     'source' => $data['source'] ?? 'unknown'
 ];
 
-// Add test email detection for debugging
+// Add test email detection for debugging and setup wizard
 if (!empty($formData['email']) && strtolower(trim($formData['email'])) === 'test@test.com') {
     $logContext['is_test_email'] = true;
     $logContext['test_email_detected'] = 'test@test.com';
+    
+    // Log script test for setup wizard verification
+    logScriptTest($pixelId);
 }
 
 quickLog('API request received for pixel: ' . $pixelId, 'INFO', $logContext);

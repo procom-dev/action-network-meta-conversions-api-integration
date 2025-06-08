@@ -10,7 +10,7 @@ header('Content-Type: application/json');
 header('Cache-Control: no-cache, no-store, must-revalidate');
 
 // Include required files
-require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/../includes/functions.php';
 
 // Enable error logging
 error_reporting(E_ALL);

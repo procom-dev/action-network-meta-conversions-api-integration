@@ -11,19 +11,21 @@ header('Content-Type: application/javascript; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
 // Aggressive cache-busting headers
-header('Cache-Control: no-cache, no-store, must-revalidate, private, max-age=0');
+header('Cache-Control: no-cache, no-store, must-revalidate, private, max-age=0, s-maxage=0, proxy-revalidate');
 header('Pragma: no-cache');
-header('Expires: 0');
-header('Expires: Mon, 26 Jul 1997 05:00:00 GMT');
+header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
 header('Last-Modified: ' . gmdate('D, d M Y H:i:s') . ' GMT');
+header('ETag: "' . md5(uniqid("", true)) . '"');
+header('CF-Cache-Status: BYPASS');
+header('CDN-Cache-Control: no-cache');
+header('Surrogate-Control: no-store');
 
 // Cloudflare-specific headers
-header('CF-Cache-Status: BYPASS');
 header('Vary: *');
 
 // Include required files
-require_once __DIR__ . '/crypto.php';
-require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/includes/crypto.php';
+require_once __DIR__ . '/includes/functions.php';
 
 // Get hash from URL parameter
 $hash = $_GET['id'] ?? '';

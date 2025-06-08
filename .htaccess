@@ -100,6 +100,22 @@ Options -Indexes
 # Default charset
 AddDefaultCharset UTF-8
 
+# Denegar acceso a directorios sensibles, excepto endpoints de tools
+RewriteRule ^(includes|config|logs)/ - [F,L]
+RewriteRule ^tools/(?!verify\.php|generate_hash\.php|check_test\.php|check_script_test\.php) - [F,L]
+
+# Denegar acceso a archivos de configuración
+<FilesMatch "\.(ini|log|sh|inc|bak|config|sql|json)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Proteger archivos específicos
+<FilesMatch "^(config\.php|settings\.php|settings\.local\.php)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
 # Handle OPTIONS preflight requests for CORS
 RewriteCond %{REQUEST_METHOD} OPTIONS
 RewriteCond %{REQUEST_URI} ^/(api|webhook)

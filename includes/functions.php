@@ -228,43 +228,40 @@ function sendToMeta($pixelId, $accessToken, $eventData) {
  */
 function quickLog($message, $level = 'INFO', $context = []) {
     // Ensure logs directory exists
-    $logDir = __DIR__ . '/logs';
+    $logDir = __DIR__ . '/../logs';
     if (!is_dir($logDir)) {
         @mkdir($logDir, 0755, true);
     }
     
-    // Determine log file based on level
-    $logFile = $logDir . '/app.log';
-    if ($level === 'ERROR') {
-        $logFile = $logDir . '/error.log';
-    } elseif ($level === 'DEBUG') {
-        $logFile = $logDir . '/debug.log';
-    }
+    // Rotate logs daily
+    $date = date('Y-m-d');
+    $logFile = $logDir . '/app-' . $date . '.log';
+    
+    // Clean old logs (older than 30 days)
+    require_once __DIR__ . '/helpers.php';
+    cleanOldLogs($logDir, 30);
     
     // Format timestamp
     $timestamp = date('Y-m-d H:i:s');
     
-    // Format message
-    $logEntry = "[{$timestamp}] [{$level}] {$message}";
+    // Create structured log entry
+    $logEntry = [
+        'timestamp' => $timestamp,
+        'level' => $level,
+        'message' => $message,
+        'context' => $context
+    ];
     
-    // Add context if provided
-    if (!empty($context)) {
-        // Remove sensitive data from context
-        $safeContext = $context;
-        if (isset($safeContext['access_token'])) {
-            $safeContext['access_token'] = substr($safeContext['access_token'], 0, 10) . '***';
-        }
-        $logEntry .= ' | Context: ' . json_encode($safeContext);
-    }
+    // Format as JSON for better parsing
+    $jsonEntry = json_encode($logEntry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
     
-    $logEntry .= PHP_EOL;
+    // Write to file
+    @file_put_contents($logFile, $jsonEntry, FILE_APPEND | LOCK_EX);
     
-    // Write to file (non-blocking)
-    @file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
-    
-    // Also log errors to PHP error log
+    // Also write to level-specific files
     if ($level === 'ERROR') {
-        error_log("Meta Conversions API Error: {$message}");
+        $errorFile = $logDir . '/error-' . $date . '.log';
+        @file_put_contents($errorFile, $jsonEntry, FILE_APPEND | LOCK_EX);
     }
 }
 
@@ -451,13 +448,11 @@ function isTestWebhook($webhookData) {
  * @param string $accessToken
  */
 function logTestWebhook($pixelId, $accessToken) {
-    $testFile = __DIR__ . '/logs/test_webhooks.json';
+    // Simple file-based test tracking - use hash as key, not pixel ID
+    $testFile = __DIR__ . '/../test_webhooks.json';
     
-    // Ensure directory exists
-    $logDir = dirname($testFile);
-    if (!is_dir($logDir)) {
-        @mkdir($logDir, 0755, true);
-    }
+    // Generate hash for this pixel/token combination
+    $hash = Crypto::encrypt($pixelId, $accessToken);
     
     // Read existing tests
     $tests = [];
@@ -468,27 +463,57 @@ function logTestWebhook($pixelId, $accessToken) {
         }
     }
     
-    // Add new test
-    $testKey = $pixelId . '_' . substr($accessToken, -10);
+    // Create unique key using the hash (same as webhook URL)
+    $testKey = $hash;
     $tests[$testKey] = [
         'timestamp' => time(),
-        'pixel_id' => $pixelId
+        'pixel_id' => $pixelId,
+        'hash' => $hash,
+        'time_ago' => 'just now'
     ];
     
-    // Clean old tests (older than 1 hour)
+    // Clean old tests (older than 1 minute)
     $tests = array_filter($tests, function($test) {
-        return (time() - $test['timestamp']) < 3600;
+        return (time() - $test['timestamp']) < 60;
     });
     
     // Save
-    $success = @file_put_contents($testFile, json_encode($tests), LOCK_EX);
+    @file_put_contents($testFile, json_encode($tests), LOCK_EX);
+}
+
+/**
+ * Logs script test for wizard verification
+ * 
+ * @param string $pixelId
+ */
+function logScriptTest($pixelId) {
+    // Simple file-based script test tracking
+    $testFile = __DIR__ . '/../script_tests.json';
     
-    // Log if save failed
-    if ($success === false) {
-        error_log("Failed to write test webhook file: $testFile");
-    } else {
-        error_log("Test webhook logged successfully for pixel: $pixelId");
+    // Read existing tests
+    $tests = [];
+    if (file_exists($testFile)) {
+        $content = @file_get_contents($testFile);
+        if ($content) {
+            $tests = json_decode($content, true) ?: [];
+        }
     }
+    
+    // Create unique key for this pixel
+    $testKey = $pixelId;
+    $tests[$testKey] = [
+        'timestamp' => time(),
+        'pixel_id' => $pixelId,
+        'events_count' => isset($tests[$testKey]) ? ($tests[$testKey]['events_count'] ?? 1) + 1 : 1
+    ];
+    
+    // Clean old tests (older than 1 minute)
+    $tests = array_filter($tests, function($test) {
+        return (time() - $test['timestamp']) < 60;
+    });
+    
+    // Save
+    @file_put_contents($testFile, json_encode($tests), LOCK_EX);
 }
 
 

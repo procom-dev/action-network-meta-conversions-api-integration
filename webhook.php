@@ -11,9 +11,11 @@ header('Content-Type: text/plain');
 header('Cache-Control: no-cache, no-store, must-revalidate');
 
 // Include required files
-require_once __DIR__ . '/crypto.php';
-require_once __DIR__ . '/functions.php';
-require_once __DIR__ . '/debug_meta_payload.php';
+require_once __DIR__ . '/includes/crypto.php';
+require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/debug_meta_payload.php';
+require_once __DIR__ . '/includes/error_handler.php';
+require_once __DIR__ . '/includes/helpers.php';
 
 // Start output buffering to control response
 ob_start();

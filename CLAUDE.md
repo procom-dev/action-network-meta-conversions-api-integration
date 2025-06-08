@@ -17,10 +17,12 @@ This is a PHP-based Action Network to Meta Conversions API integration system. I
 
 - **webhook.php**: Main webhook endpoint - receives Action Network form submissions, processes and forwards to Meta API
 - **api.php**: REST endpoint for JavaScript tracker to submit browser-side data
-- **crypto.php**: Encryption/decryption system using AES-256-CBC for secure credential storage
-- **functions.php**: Shared utilities for Meta API communication, logging, data hashing, phone processing
+- **includes/crypto.php**: Encryption/decryption system using AES-256-CBC for secure credential storage
+- **includes/functions.php**: Shared utilities for Meta API communication, logging, data hashing, phone processing
+- **includes/helpers.php**: General utility functions for data processing and log management
 - **tracker.js.php**: Dynamic JavaScript generator that creates form tracking code
 - **setup.php**: Web-based configuration wizard for setting up integrations
+- **config/settings.php**: Centralized configuration management
 
 ### Data Flow
 
@@ -59,12 +61,12 @@ rm logs/*.log
 
 ## Key Configuration
 
-### Security Keys (crypto.php)
+### Security Keys (includes/crypto.php)
 - `SECRET_KEY`: 32-byte hex key for AES encryption - **MUST BE CHANGED IN PRODUCTION**
 - `HASH_SALT`: Random string for HMAC verification
 
-### Meta API Settings (functions.php)
-- `META_API_VERSION`: Currently v18.0
+### Meta API Settings (includes/functions.php)
+- `META_API_VERSION`: Currently v23.0
 - `META_API_BASE_URL`: Graph API endpoint
 
 ## Data Processing Patterns
@@ -84,7 +86,19 @@ Webhook automatically detects Action Network test submissions using known test e
 - **Webhook Endpoint**: `/webhook.php?id={encrypted_hash}`
 - **JavaScript Tracker**: `/tracker.js?id={encrypted_hash}`
 - **Browser API**: `/api.php`
-- **Credential Verification**: `/verify.php`
+- **Credential Verification**: `/tools/verify.php`
+- **Hash Generation**: `/tools/generate_hash.php`
+
+## Directory Structure
+
+The codebase is organized into logical directories:
+
+- **`/`** - Root endpoints (webhook.php, api.php, setup.php, etc.)
+- **`includes/`** - Core utilities (crypto.php, functions.php, helpers.php)
+- **`config/`** - Configuration files (settings.php, settings.local.php)
+- **`tools/`** - Utility scripts (verify.php, generate_hash.php, check_test.php)
+- **`logs/`** - Application logs (app.log, error.log, debug.log, webhooks.log)
+- **`backups/`** - Automatic backups with timestamps
 
 ## Error Handling
 
@@ -93,3 +107,4 @@ All errors are logged to structured log files in `/logs/` directory. The system 
 - Background processing after immediate webhook response
 - Graceful fallbacks for missing data fields
 - Safe error responses that don't expose internal details
+- Centralized error handling via `includes/error_handler.php`

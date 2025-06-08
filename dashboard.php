@@ -7,7 +7,11 @@
 
 // Security check - simple password protection
 session_start();
-$dashboard_password = 'meta2024'; // Change this in production!
+
+// Load configuration
+require_once __DIR__ . '/includes/crypto.php';
+$config = Crypto::getConfig();
+$dashboard_password = $config['dashboard_password'];
 
 if (!isset($_SESSION['dashboard_auth']) || $_SESSION['dashboard_auth'] !== true) {
     if (isset($_POST['password']) && $_POST['password'] === $dashboard_password) {
