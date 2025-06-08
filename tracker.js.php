@@ -689,15 +689,17 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
             
             // 🎯 NEW: Generate event_id with fbclid priority for perfect pairing
             const sendEventToAPI = async () => {
-                let eventId = null;
-                if (formData.email) {
-                    // Use same fbclid-priority logic as webhook
-                    eventId = await Utils.generateEventId(formData.email, fbData.fbclid);
-                    console.log('[Meta Tracker] 🆔 Generated event_id for deduplication with webhook:', eventId);
-                } else {
-                    console.log('[Meta Tracker] ⚠️ No email found - webhook deduplication may not work');
-                    eventId = 'js_no_email_' + Math.floor(Date.now() / 1000);
+                // Only send CompleteRegistration if we successfully extracted email data
+                if (!formData.email) {
+                    console.log('[Meta Tracker] ⚠️ No email found in form data - skipping CompleteRegistration');
+                    console.log('[Meta Tracker] 📝 This likely indicates a false positive /answers detection');
+                    console.log('[Meta Tracker] 🚫 Not sending event to prevent inflated conversion numbers');
+                    return;
                 }
+                
+                // Use same fbclid-priority logic as webhook
+                const eventId = await Utils.generateEventId(formData.email, fbData.fbclid);
+                console.log('[Meta Tracker] 🆔 Generated event_id for deduplication with webhook:', eventId);
                 
                 const payload = {
                     event_type: 'CompleteRegistration',
@@ -740,6 +742,12 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
                     const payloadData = MetaTracker.parseFormDataFromPayload(data);
                     console.log('[Meta Tracker] 📝 Extracted from payload:', payloadData);
                     
+                    // Debug: Log if no email was found to help identify false positives
+                    if (!payloadData.email) {
+                        console.warn('[Meta Tracker] ⚠️ No email extracted from /answers payload - possible false positive');
+                        console.warn('[Meta Tracker] 📦 Raw payload for debugging:', data);
+                    }
+                    
                     setTimeout(() => {
                         MetaTracker.sendFormSubmission(payloadData);
                     }, 100);
@@ -758,6 +766,12 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
                         
                         const payloadData = MetaTracker.parseFormDataFromPayload(options.body);
                         console.log('[Meta Tracker] 📝 Extracted from payload:', payloadData);
+                        
+                        // Debug: Log if no email was found to help identify false positives
+                        if (!payloadData.email) {
+                            console.warn('[Meta Tracker] ⚠️ No email extracted from /answers payload - possible false positive');
+                            console.warn('[Meta Tracker] 📦 Raw payload for debugging:', options.body);
+                        }
                         
                         setTimeout(() => {
                             MetaTracker.sendFormSubmission(payloadData);
