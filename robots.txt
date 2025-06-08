@@ -1,0 +1,22 @@
+User-agent: *
+Disallow: /tracker.js.php
+Disallow: /api.php
+Disallow: /webhook.php
+Disallow: /dashboard.php
+Disallow: /dashboard_api.php
+Disallow: /logs/
+Disallow: /setup.php
+Disallow: /verify.php
+Disallow: /generate_hash.php
+Disallow: /check_test.php
+Disallow: /check_script_test.php
+Disallow: /debug_meta_payload.php
+Disallow: /functions.php
+Disallow: /crypto.php
+Disallow: /config.php
+
+# Allow setup.php for legitimate users
+Allow: /setup.php
+
+# This is a Meta Conversions API integration
+# Only tracker.js.php should be accessed with valid parameters

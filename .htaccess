@@ -1,0 +1,137 @@
+# Enable RewriteEngine
+RewriteEngine On
+
+# Security: Prevent access to .htaccess itself
+<Files .htaccess>
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Security: Prevent access to PHP files that shouldn't be accessed directly
+<FilesMatch "^(functions|crypto)\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Security: Completely block access to logs directory
+RewriteRule ^logs(/.*)?$ - [F,L]
+
+# Security: Block access to any backup files
+<FilesMatch "\.(bak|config|sql|fla|psd|ini|log|sh|inc|swp|dist|git|gitignore)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Main rewrite: Serve tracker.js as PHP file
+RewriteRule ^tracker\.js$ tracker.js.php [L,QSA]
+
+# Main rewrite: Serve webhook as PHP file (handles /webhook?id=HASH)
+RewriteRule ^webhook$ webhook.php [L,QSA]
+
+# Optional: Clean URLs for webhook endpoint
+# This allows using /webhook/HASH instead of /webhook.php?id=HASH
+RewriteRule ^webhook/([a-zA-Z0-9_-]+)/?$ webhook.php?id=$1 [L,QSA]
+
+# Security Headers
+<IfModule mod_headers.c>
+    # Prevent clickjacking
+    Header set X-Frame-Options "SAMEORIGIN"
+    
+    # Prevent MIME type sniffing
+    Header set X-Content-Type-Options "nosniff"
+    
+    # Enable XSS protection
+    Header set X-XSS-Protection "1; mode=block"
+    
+    # Referrer Policy
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # CORS headers for tracker.js (allow from any origin since it needs to work on AN forms)
+    <FilesMatch "tracker\.js$">
+        Header set Access-Control-Allow-Origin "*"
+        Header set Access-Control-Allow-Methods "GET"
+    </FilesMatch>
+    
+    # CORS headers for api.php endpoint
+    <FilesMatch "api\.php$">
+        Header always set Access-Control-Allow-Origin "*"
+        Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+        Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+        Header always set Access-Control-Max-Age "86400"
+        Header always set Access-Control-Allow-Credentials "false"
+    </FilesMatch>
+    
+    # Cache control for tracker.js - completely disable caching
+    <FilesMatch "tracker\.js$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate, private, max-age=0"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+        Header set Vary "*"
+    </FilesMatch>
+</IfModule>
+
+# Compression for better performance
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/javascript application/javascript application/x-javascript
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
+    AddOutputFilterByType DEFLATE application/json
+</IfModule>
+
+# PHP Settings (if allowed by server)
+<IfModule mod_php7.c>
+    # Hide PHP version
+    php_flag expose_php Off
+    
+    # Increase memory limit for processing
+    php_value memory_limit 128M
+    
+    # Increase execution time for webhook processing
+    php_value max_execution_time 30
+    
+    # Error handling
+    php_flag display_errors Off
+    php_flag log_errors On
+    php_value error_log logs/php_errors.log
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes
+
+# Default charset
+AddDefaultCharset UTF-8
+
+# Handle OPTIONS preflight requests for CORS
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteCond %{REQUEST_URI} ^/(api|webhook)
+RewriteRule ^(.*)$ $1 [R=200,L]
+
+# Ensure api.php handles OPTIONS requests properly
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^api\.php$ api.php [L]
+
+# Force HTTPS (uncomment if you want to enforce SSL)
+# RewriteCond %{HTTPS} !=on
+# RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+
+# Custom error pages (optional)
+# ErrorDocument 404 /404.html
+# ErrorDocument 403 /403.html
+# ErrorDocument 500 /500.html
+
+# Block bad bots and crawlers (optional but recommended)
+<IfModule mod_rewrite.c>
+    RewriteCond %{HTTP_USER_AGENT} ^.*(AhrefsBot|MJ12bot|SemrushBot|Baiduspider|DotBot).* [NC]
+    RewriteRule .* - [F,L]
+</IfModule>
+
+# Rate limiting for API endpoints (requires mod_evasive)
+<IfModule mod_evasive24.c>
+    <FilesMatch "(api|webhook)\.php$">
+        DOSHashTableSize 3097
+        DOSPageCount 20
+        DOSSiteCount 100
+        DOSPageInterval 1
+        DOSSiteInterval 1
+        DOSBlockingPeriod 10
+    </FilesMatch>
+</IfModule>
