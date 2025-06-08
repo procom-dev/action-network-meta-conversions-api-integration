@@ -47,16 +47,45 @@ This is a PHP-based Action Network to Meta Conversions API integration system. I
 php -S localhost:8000
 ```
 
-### Log Monitoring
+### Testing and Verification
 ```bash
+# Test Meta API credentials and connectivity
+php tools/verify.php
+
+# Generate new encrypted hash for webhook URL
+php tools/generate_hash.php
+
+# Check if webhook received test data
+php tools/check_test.php
+
+# Check if JavaScript tracker received test data
+php tools/check_script_test.php
+
+# Test webhook endpoint directly
+curl -X POST "http://localhost:8000/webhook.php?id={encrypted_hash}" \
+  -H "Content-Type: application/json" \
+  -d @test_webhooks.json
+```
+
+### Log Management
+```bash
+# Monitor logs in real-time
 tail -f logs/app.log
 tail -f logs/error.log
 tail -f logs/debug.log
+tail -f logs/webhooks.log
+
+# Clear all logs
+rm logs/*.log
+
+# View recent webhook activity
+tail -50 logs/webhooks.log | grep "Meta API"
 ```
 
-### Clear Logs
+### Dashboard Access
 ```bash
-rm logs/*.log
+# Access monitoring dashboard (requires password from config)
+open http://localhost:8000/dashboard.php
 ```
 
 ## Key Configuration
@@ -78,7 +107,7 @@ Spanish mobile numbers (9 digits starting with 6/7) automatically prefixed with 
 Consistent deduplication using SHA256 of `email + rounded_timestamp_to_60s`. Same algorithm in both PHP and JavaScript ensures webhook and browser events don't duplicate.
 
 ### Test Detection
-Webhook automatically detects Action Network test submissions using known test email patterns and UUIDs to avoid sending test data to Meta.
+Webhook automatically detects Action Network test submissions using known test email patterns and UUIDs to avoid sending test data to Meta. Test data is stored in `script_tests.json` and `test_webhooks.json` for verification.
 
 ## Integration URLs
 
@@ -86,8 +115,11 @@ Webhook automatically detects Action Network test submissions using known test e
 - **Webhook Endpoint**: `/webhook.php?id={encrypted_hash}`
 - **JavaScript Tracker**: `/tracker.js?id={encrypted_hash}`
 - **Browser API**: `/api.php`
+- **Monitoring Dashboard**: `/dashboard.php` (password protected)
+- **Dashboard API**: `/dashboard_api.php`
 - **Credential Verification**: `/tools/verify.php`
 - **Hash Generation**: `/tools/generate_hash.php`
+- **Test Checkers**: `/tools/check_test.php`, `/tools/check_script_test.php`
 
 ## Directory Structure
 
@@ -100,6 +132,19 @@ The codebase is organized into logical directories:
 - **`logs/`** - Application logs (app.log, error.log, debug.log, webhooks.log)
 - **`backups/`** - Automatic backups with timestamps
 
+## Configuration Management
+
+### Primary Configuration
+- **`config.php`** - Basic domain utilities and crypto inclusion
+- **`config/settings.php`** - Centralized settings (encryption keys, dashboard password)
+- **`config/settings.local.php`** - Local overrides (gitignored)
+
+### Credential Storage
+All sensitive credentials (Pixel ID, Access Token) are stored encrypted in URL parameters using AES-256-CBC. The system includes:
+- Automatic credential expiration (1 year default)
+- HMAC integrity verification
+- No plaintext storage anywhere in the system
+
 ## Error Handling
 
 All errors are logged to structured log files in `/logs/` directory. The system includes:
@@ -108,3 +153,16 @@ All errors are logged to structured log files in `/logs/` directory. The system 
 - Graceful fallbacks for missing data fields
 - Safe error responses that don't expose internal details
 - Centralized error handling via `includes/error_handler.php`
+
+## Monitoring and Analytics
+
+### Real-time Dashboard
+- **`dashboard.php`** - Web-based monitoring interface with password protection
+- **`dashboard_api.php`** - JSON API for dashboard data
+- Displays success rates, match quality, recent events, and error patterns
+- Auto-refreshes every 30 seconds with real-time data
+
+### Debug Tools
+- **`debug_facebook_data.php`** - Test Meta API connectivity and response handling
+- **`debug_meta_payload.php`** - Inspect and validate payload formatting
+- **Test data storage** - `script_tests.json` and `test_webhooks.json` track test submissions

@@ -339,7 +339,7 @@ function analyzeMatchQuality($messages) {
  * Dedicated debug logging function
  */
 function logPayloadDebug($level, $message, $context = []) {
-    $logFile = __DIR__ . '/logs/meta_payload_debug.log';
+    $logFile = dirname(__DIR__) . '/logs/meta_payload_debug.log';
     
     // Ensure directory exists
     $logDir = dirname($logFile);
