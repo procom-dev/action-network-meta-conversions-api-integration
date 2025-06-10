@@ -36,6 +36,7 @@ if (!isset($_SESSION['dashboard_auth']) || $_SESSION['dashboard_auth'] !== true)
     </head>
     <body>
         <form method="post" class="login-form">
+            <img src="assets/logo-action-network-meta-conversions-api-integration.png" alt="Logo" style="max-width: 200px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
             <h2>Meta API Dashboard</h2>
             <div>
                 <input type="password" name="password" placeholder="Enter dashboard password" required>

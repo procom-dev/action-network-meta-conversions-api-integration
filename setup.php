@@ -33,6 +33,7 @@ initCrypto();
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background: #f0f2f5;
+            background-image: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
             min-height: 100vh;
             color: #1c1e21;
             line-height: 1.5;
@@ -44,19 +45,56 @@ initCrypto();
             padding: 0 20px;
         }
 
+        .meta-branding {
+            text-align: center;
+            margin-top: 20px;
+            padding: 16px;
+            color: #65676b;
+            font-size: 14px;
+        }
+
+        .meta-branding a {
+            color: #1877f2;
+            text-decoration: none;
+        }
+
+        .meta-branding a:hover {
+            color: #166fe5;
+            text-decoration: underline;
+        }
+
         .card {
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, .1);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .12);
             overflow: hidden;
             margin-bottom: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .header {
-            background: linear-gradient(135deg, #1877f2 0%, #0a4eb3 100%);
+            background: linear-gradient(135deg, #1877f2 0%, #42a5f5 50%, #0866ff 100%);
             color: white;
-            padding: 32px;
+            padding: 40px 32px;
             text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="20" cy="20" r="1" fill="white" opacity="0.1"/><circle cx="80" cy="40" r="1" fill="white" opacity="0.1"/><circle cx="40" cy="80" r="1" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+            opacity: 0.3;
+        }
+
+        .header > * {
+            position: relative;
+            z-index: 1;
         }
 
         .header h1 {
@@ -166,18 +204,20 @@ initCrypto();
 
         .form-input, .form-select {
             width: 100%;
-            padding: 12px 16px;
-            border: 1px solid #dddfe2;
-            border-radius: 8px;
+            padding: 16px 20px;
+            border: 2px solid #e4e6eb;
+            border-radius: 12px;
             font-size: 16px;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             background: white;
+            font-family: inherit;
         }
 
         .form-input:focus, .form-select:focus {
             outline: none;
             border-color: #1877f2;
-            box-shadow: 0 0 0 3px rgba(24, 119, 242, .1);
+            box-shadow: 0 0 0 4px rgba(24, 119, 242, .15);
+            transform: translateY(-1px);
         }
 
         .form-hint {
@@ -187,26 +227,45 @@ initCrypto();
         }
 
         .button {
-            background: #1877f2;
+            background: linear-gradient(135deg, #1877f2 0%, #0866ff 100%);
             color: white;
             border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
+            padding: 14px 28px;
+            border-radius: 10px;
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            min-width: 120px;
+            min-width: 140px;
             justify-content: center;
+            text-transform: none;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
         }
 
         .button:hover:not(:disabled) {
-            background: #166fe5;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(24, 119, 242, .25);
+            background: linear-gradient(135deg, #166fe5 0%, #0653d3 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(24, 119, 242, .3);
+        }
+
+        .button:hover::before {
+            left: 100%;
         }
 
         .button:disabled {
@@ -447,11 +506,10 @@ initCrypto();
     <div class="container">
         <div class="card">
             <div class="header">
-                <h1>
-                    <span class="logo">M</span>
-                    Action Network → Meta Conversions API
-                </h1>
-                <div class="subtitle">Connect your forms to Meta advertising platform</div>
+                <div style="margin-bottom: 20px;">
+                    <img src="assets/transparent-logo-action-network-meta-conversions-api-integration.png" alt="Logo" style="width: 400px; max-width: 100%;">
+                </div>
+                <div class="subtitle">Use Meta Conversions API with Action Network, and improve your Meta Ads impact</div>
             </div>
             
             <div class="progress">
@@ -779,6 +837,10 @@ initCrypto();
                     </div>
                 </div>
             </div>
+        </div>
+        
+        <div class="meta-branding">
+            Powered by <a href="https://procom.dev" target="_blank"><strong>procom.dev</strong></a> • <a href="https://github.com/procom-dev/action-network-meta-conversions-api-integration" target="_blank">GitHub Project</a>
         </div>
     </div>
 

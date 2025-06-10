@@ -2,6 +2,8 @@
 
 A PHP-based integration system that bridges Action Network form submissions with Meta's Conversions API for enhanced advertising attribution and campaign optimization.
 
+![Action Network to Meta Conversions API Integration](assets/action-network-meta-conversions-api-integration.png)
+
 ## 🎯 What This Does
 
 This system captures form submissions from Action Network and sends them to Meta's Conversions API, providing:
