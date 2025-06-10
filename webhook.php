@@ -279,20 +279,31 @@ try {
     // Get event timestamp
     $eventTime = isset($actionRecord['created_date']) ? strtotime($actionRecord['created_date']) : time();
     
-    // 🎯 NEW: Generate event ID with fbclid priority for perfect pairing (same logic as JavaScript)
+    // Generate event ID based on available data (same priority as JavaScript)
     $eventId = generateEventIdWithFbclid($email, $fbclid, $eventTime);
-    
+
+    if (!$eventId) {
+        // This shouldn't happen in webhook as we should always have email
+        quickLog('WARNING: Could not generate event_id in webhook', 'WARNING', [
+            'has_email' => !empty($email),
+            'has_fbclid' => !empty($fbclid)
+        ]);
+        // Generate a unique one to avoid null
+        $eventId = 'webhook_' . time() . '_' . uniqid();
+    }
+
     if ($eventId) {
-        if (!empty($fbclid)) {
-            quickLog('🆔 Generated fbclid-based event_id for perfect pairing', 'INFO', [
+        if (!empty($email)) {
+            quickLog('🆔 Generated email-based event_id', 'DEBUG', [
+                'event_id_preview' => substr($eventId, 0, 12) . '***',
+                'method' => 'email_timestamp',
+                'has_fbclid' => !empty($fbclid)
+            ]);
+        } elseif (!empty($fbclid)) {
+            quickLog('🆔 Generated fbclid-based event_id', 'INFO', [
                 'fbclid_length' => strlen($fbclid),
                 'event_id_preview' => substr($eventId, 0, 12) . '***',
-                'method' => 'fbclid_priority'
-            ]);
-        } else {
-            quickLog('🆔 Generated email+timestamp event_id', 'DEBUG', [
-                'event_id_preview' => substr($eventId, 0, 12) . '***',
-                'method' => 'email_timestamp'
+                'method' => 'fbclid_only'
             ]);
         }
     } elseif (!empty($externalId)) {

@@ -91,6 +91,9 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
 (function() {
     'use strict';
     
+    // Initialize call log array
+    window.fbqCallLog = [];
+    
     // Configuration
     const CONFIG = {
         hash: '<?php echo $hash; ?>',
@@ -184,69 +187,67 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
             return urlParams.get(name);
         },
         
-        generateEventId: async function(email, fbclid = null) {
-            // 🎯 NEW: Priority-based event_id generation for perfect pairing
-            
-            // Method 1: fbclid-based (most reliable for pairing)
-            if (fbclid) {
-                const input = fbclid + '_' + (email ? email.toLowerCase().trim() : 'no_email');
-                Utils.log('🆔 Using fbclid-based event_id for perfect pairing');
-                
-                if (window.crypto && window.crypto.subtle) {
-                    try {
-                        const encoder = new TextEncoder();
-                        const data = encoder.encode(input);
-                        const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-                        const hashArray = Array.from(new Uint8Array(hashBuffer));
-                        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-                    } catch (e) {
-                        return Utils.simpleHash(input);
-                    }
-                }
-                return Utils.simpleHash(input);
+        // Add SHA256 implementation
+        sha256: async function(message) {
+            if (window.crypto && window.crypto.subtle) {
+                const msgBuffer = new TextEncoder().encode(message);
+                const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
             }
+            // Fallback for older browsers
+            return this.sha256Fallback(message);
+        },
+
+        sha256Fallback: function(message) {
+            // Simple fallback - won't match PHP exactly but better than nothing
+            console.warn('[Meta Tracker] Using fallback hash - may not match server');
+            let hash = 0;
+            for (let i = 0; i < message.length; i++) {
+                const char = message.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return 'js_fallback_' + Math.abs(hash).toString(16);
+        },
+
+        // Updated event ID generation - MUST match PHP logic exactly
+        generateEventId: async function(email, fbclid = null) {
+            const timestamp = Math.floor(Date.now() / 1000);
+            const roundedTime = Math.floor(timestamp / 1800) * 1800; // 30 minutes
             
-            // Method 2: email + timestamp (fallback for non-Facebook traffic)
-            if (email) {
-                const timestamp = Math.floor(Date.now() / 1000);
-                const roundedTime = Math.floor(timestamp / 1800) * 1800;
+            // Priority 1: email-based
+            if (email && email.trim() !== '') {
                 const normalizedEmail = email.toLowerCase().trim();
                 const input = normalizedEmail + '_' + roundedTime;
-                
-                if (window.crypto && window.crypto.subtle) {
-                    try {
-                        const encoder = new TextEncoder();
-                        const data = encoder.encode(input);
-                        const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-                        const hashArray = Array.from(new Uint8Array(hashBuffer));
-                        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-                    } catch (e) {
-                        console.warn('[Meta Tracker] ⚠️ Crypto API failed, using fallback hash');
-                    }
-                }
-                return Utils.simpleHash(input);
+                return await this.sha256(input);
             }
             
+            // Priority 2: fbclid-based
+            if (fbclid && fbclid.trim() !== '') {
+                const input = fbclid + '_' + roundedTime;
+                return await this.sha256(input);
+            }
+            
+            // No valid identifiers
             return null;
         },
         
+        // Synchronous version for pixel enhancer
         generateEventIdSync: function(email, fbclid = null) {
-            // 🎯 NEW: Synchronous version with fbclid priority (same logic as async version)
+            const timestamp = Math.floor(Date.now() / 1000);
+            const roundedTime = Math.floor(timestamp / 1800) * 1800;
             
-            // Method 1: fbclid-based (most reliable for pairing)
-            if (fbclid) {
-                const input = fbclid + '_' + (email ? email.toLowerCase().trim() : 'no_email');
-                Utils.log('🆔 Using fbclid-based event_id (sync) for perfect pairing');
-                return Utils.simpleHash(input);
-            }
-            
-            // Method 2: email + timestamp (fallback for non-Facebook traffic)
-            if (email) {
-                const timestamp = Math.floor(Date.now() / 1000);
-                const roundedTime = Math.floor(timestamp / 1800) * 1800;
+            if (email && email.trim() !== '') {
                 const normalizedEmail = email.toLowerCase().trim();
                 const input = normalizedEmail + '_' + roundedTime;
-                return Utils.simpleHash(input);
+                // Use simple hash for sync version
+                return 'sync_' + this.simpleHash(input);
+            }
+            
+            if (fbclid && fbclid.trim() !== '') {
+                const input = fbclid + '_' + roundedTime;
+                return 'sync_' + this.simpleHash(input);
             }
             
             return null;
@@ -333,28 +334,53 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
                     // Create enhanced wrapper that injects our event_ids
                     const enhancedFbq = function(action, eventName, parameters, options) {
                         try {
+                            // Log ALL fbq calls
+                            window.fbqCallLog.push({
+                                time: new Date().toISOString(),
+                                action: action,
+                                eventName: eventName,
+                                hasEventId: !!(options && options.eventID),
+                                eventId: options && options.eventID,
+                                source: 'pixel'
+                            });
+                            
+                            console.log('[Meta Tracker] 📸 Pixel call intercepted:', {
+                                action, eventName, hasEventId: !!(options && options.eventID)
+                            });
+                            
                             // Inject our event_id for track calls
                             if (action === 'track') {
                                 options = options || {};
                                 parameters = parameters || {};
                                 
-                                // Generate our custom event_id for deduplication
+                                // Enhanced event_id injection with pre-calculated matching IDs
                                 if (!options.eventID) {
-                                    if (eventName === 'PageView') {
+                                    if (eventName === 'CompleteRegistration' && window.pendingCompleteRegistrationId) {
+                                        options.eventID = window.pendingCompleteRegistrationId;
+                                        Utils.log('🆔 Using pre-calculated matching event_id:', options.eventID);
+                                        
+                                        // Clear it after use
+                                        delete window.pendingCompleteRegistrationId;
+                                    } else if (eventName === 'PageView') {
                                         options.eventID = Utils.generatePageViewEventId();
                                         Utils.log('🆔 Injected PageView event_id:', options.eventID);
-                                    } else if (parameters && parameters.email) {
-                                        // Get fbclid for form events too
-                                        const fbData = Utils.getFacebookData();
-                                        options.eventID = Utils.generateEventIdSync(parameters.email, fbData.fbclid);
-                                        Utils.log('🆔 Injected form event_id:', options.eventID);
                                     } else {
-                                        // Fallback event_id for other events
-                                        options.eventID = eventName.toLowerCase() + '_' + Date.now();
-                                        Utils.log('🆔 Injected fallback event_id:', options.eventID);
+                                        // Fallback: try to generate from parameters
+                                        const email = parameters && parameters.email ? parameters.email : null;
+                                        const fbData = Utils.getFacebookData();
+                                        
+                                        if (email || fbData.fbclid) {
+                                            // Generate synchronously (not ideal but necessary here)
+                                            options.eventID = Utils.generateEventIdSync(email, fbData.fbclid);
+                                            Utils.log('🆔 Generated fallback event_id:', options.eventID);
+                                        } else {
+                                            // Last resort: timestamp-based (won't match webhook)
+                                            options.eventID = 'no_match_' + Date.now();
+                                            Utils.log('⚠️ No identifiers - using non-matching event_id:', options.eventID);
+                                        }
                                     }
                                     
-                                    // Store event_id for webhook correlation
+                                    // Store event_id for debugging
                                     MetaTracker.storeEventId(eventName, options.eventID, parameters);
                                 }
                                 
@@ -642,14 +668,24 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
                         const decodedKey = decodeURIComponent(key);
                         const decodedValue = decodeURIComponent(value);
                         
-                        if (decodedKey === 'answer[email]') data.email = decodedValue;
-                        else if (decodedKey === 'answer[first_name]') data.first_name = decodedValue;
-                        else if (decodedKey === 'answer[last_name]') data.last_name = decodedValue;
-                        else if (decodedKey === 'answer[phone]') data.phone = decodedValue;
-                        else if (decodedKey === 'answer[city]') data.city = decodedValue;
-                        else if (decodedKey === 'answer[state]') data.state = decodedValue;
-                        else if (decodedKey === 'answer[zip_code]') data.zip = decodedValue;
-                        else if (decodedKey === 'answer[country]') data.country = decodedValue;
+                        // Extract fields with various possible names
+                        if (decodedKey === 'answer[email]' || decodedKey === 'email') {
+                            data.email = decodedValue;
+                        } else if (decodedKey === 'answer[first_name]' || decodedKey === 'first_name') {
+                            data.first_name = decodedValue;
+                        } else if (decodedKey === 'answer[last_name]' || decodedKey === 'last_name') {
+                            data.last_name = decodedValue;
+                        } else if (decodedKey === 'answer[phone]' || decodedKey === 'phone') {
+                            data.phone = decodedValue;
+                        } else if (decodedKey === 'answer[city]' || decodedKey === 'city') {
+                            data.city = decodedValue;
+                        } else if (decodedKey === 'answer[state]' || decodedKey === 'state') {
+                            data.state = decodedValue;
+                        } else if (decodedKey === 'answer[zip_code]' || decodedKey === 'zip' || decodedKey === 'zip_code') {
+                            data.zip = decodedValue;
+                        } else if (decodedKey === 'answer[country]' || decodedKey === 'country') {
+                            data.country = decodedValue;
+                        }
                     }
                 }
             }
@@ -658,7 +694,17 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
         },
         
         sendFormSubmission: function(formData) {
+            // Log form submission detection to call log
+            window.fbqCallLog.push({
+                time: new Date().toISOString(),
+                action: 'custom',
+                eventName: 'CompleteRegistration',
+                source: 'answers_detection',
+                formData: formData
+            });
+            
             console.log('[Meta Tracker] 🎯 Action Network form submission detected!');
+            console.log('[Meta Tracker] 📋 Form submission detected, log so far:', window.fbqCallLog);
             console.log('[Meta Tracker] 📝 Sending CompleteRegistration to Conversions API with browser data');
             
             // All Action Network form submissions are treated as CompleteRegistration
@@ -687,20 +733,26 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
                 domain: window.location.hostname
             };
             
-            // 🎯 NEW: Generate event_id with fbclid priority for perfect pairing
             const sendEventToAPI = async () => {
-                // Only send CompleteRegistration if we successfully extracted email data
-                if (!formData.email) {
-                    console.log('[Meta Tracker] ⚠️ No email found in form data - skipping CompleteRegistration');
-                    console.log('[Meta Tracker] 📝 This likely indicates a false positive /answers detection');
-                    console.log('[Meta Tracker] 🚫 Not sending event to prevent inflated conversion numbers');
-                    return;
+                const fbData = Utils.getFacebookData();
+                
+                // Generate event ID based on available data
+                const eventId = await Utils.generateEventId(
+                    formData.email || null,
+                    fbData.fbclid || null
+                );
+                
+                if (!eventId) {
+                    console.log('[Meta Tracker] ⚠️ No email or fbclid - skipping tracker CAPI to prevent duplication');
+                    console.log('[Meta Tracker] 📊 Only webhook will send this conversion');
+                    return; // DON'T SEND
                 }
                 
-                // Use same fbclid-priority logic as webhook
-                const eventId = await Utils.generateEventId(formData.email, fbData.fbclid);
-                console.log('[Meta Tracker] 🆔 Generated event_id for deduplication with webhook:', eventId);
+                // Store event ID for pixel enhancer to use
+                window.pendingCompleteRegistrationId = eventId;
+                console.log('[Meta Tracker] 💾 Stored event_id for pixel enhancer:', eventId);
                 
+                // Prepare payload with browser data
                 const payload = {
                     event_type: 'CompleteRegistration',
                     event_id: eventId,
@@ -713,8 +765,7 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
                     purpose: 'browser_data_enhancement'
                 };
                 
-                console.log('[Meta Tracker] 🚀 Sending to Conversions API for browser data enhancement...');
-                console.log('[Meta Tracker] 📦 Payload:', payload);
+                console.log('[Meta Tracker] 🚀 Sending to Conversions API with matching event_id...');
                 Utils.sendData(payload);
             };
             

@@ -296,29 +296,30 @@ function generateEventId($email, $timestamp = null) {
  * @param string $email User email (optional)
  * @param string $fbclid Facebook click ID from Action Network form (optional)
  * @param int $timestamp Event timestamp (optional)
- * @return string Event ID hash
+ * @return string|null Event ID hash or null if no valid identifiers
  */
 function generateEventIdWithFbclid($email = null, $fbclid = null, $timestamp = null) {
     if ($timestamp === null) {
         $timestamp = time();
     }
     
-    // Method 1: fbclid-based (most reliable for pairing)
-    if (!empty($fbclid)) {
-        $emailPart = !empty($email) ? strtolower(trim($email)) : 'no_email';
-        $input = $fbclid . '_' . $emailPart;
-        return hash('sha256', $input);
-    }
+    // Round to 30 minutes (1800 seconds) for deduplication window
+    $roundedTime = floor($timestamp / 1800) * 1800;
     
-    // Method 2: email + timestamp (fallback for non-Facebook traffic)
+    // Priority 1: email-based (most common)
     if (!empty($email)) {
-        // Round timestamp to nearest 30 minutes (1800 seconds) for deduplication window
-        $roundedTime = floor($timestamp / 1800) * 1800;
         $normalizedEmail = strtolower(trim($email));
         $input = $normalizedEmail . '_' . $roundedTime;
         return hash('sha256', $input);
     }
     
+    // Priority 2: fbclid-based (Facebook traffic without email)
+    if (!empty($fbclid)) {
+        $input = $fbclid . '_' . $roundedTime;
+        return hash('sha256', $input);
+    }
+    
+    // No valid identifiers - return null to indicate skip
     return null;
 }
 
