@@ -253,13 +253,58 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
             return null;
         },
         
-        generatePageViewEventId: function() {
-            // Create deterministic PageView event_id based on URL and time window
-            const url = window.location.href.split('?')[0]; // Remove query params
+        generatePageViewEventId: async function() {
+            // Enhanced PageView event_id generation with better deduplication
             const timestamp = Math.floor(Date.now() / 1000);
             const timeWindow = Math.floor(timestamp / 300) * 300; // 5-minute windows
-            const pageViewKey = url + '_pageview_' + timeWindow;
-            return Utils.simpleHash(pageViewKey);
+            
+            // Get Facebook data
+            const fbData = this.getFacebookData();
+            
+            // Priority 1: fbclid + timestamp
+            if (fbData.fbclid && fbData.fbclid.trim() !== '') {
+                const input = fbData.fbclid + '_pageview_' + timeWindow;
+                return await this.sha256(input);
+            }
+            
+            // Priority 2: session fingerprint + URL + timestamp
+            const sessionFingerprint = [
+                navigator.userAgent,
+                screen.width + 'x' + screen.height,
+                Intl.DateTimeFormat().resolvedOptions().timeZone,
+                navigator.language
+            ].join('|');
+            
+            const url = window.location.href.split('?')[0]; // Remove query params
+            const input = sessionFingerprint + '_' + url + '_pageview_' + timeWindow;
+            return await this.sha256(input);
+        },
+        
+        generatePageViewEventIdSync: function() {
+            // Synchronous version for pixel enhancer
+            const timestamp = Math.floor(Date.now() / 1000);
+            const timeWindow = Math.floor(timestamp / 300) * 300; // 5-minute windows
+            
+            // Get Facebook data
+            const fbData = this.getFacebookData();
+            
+            // Priority 1: fbclid + timestamp
+            if (fbData.fbclid && fbData.fbclid.trim() !== '') {
+                const input = fbData.fbclid + '_pageview_' + timeWindow;
+                return 'sync_pv_' + this.simpleHash(input);
+            }
+            
+            // Priority 2: session fingerprint + URL + timestamp
+            const sessionFingerprint = [
+                navigator.userAgent,
+                screen.width + 'x' + screen.height,
+                Intl.DateTimeFormat().resolvedOptions().timeZone,
+                navigator.language
+            ].join('|');
+            
+            const url = window.location.href.split('?')[0]; // Remove query params
+            const input = sessionFingerprint + '_' + url + '_pageview_' + timeWindow;
+            return 'sync_pv_' + this.simpleHash(input);
         },
         
         simpleHash: function(str) {
@@ -362,8 +407,14 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
                                         // Clear it after use
                                         delete window.pendingCompleteRegistrationId;
                                     } else if (eventName === 'PageView') {
-                                        options.eventID = Utils.generatePageViewEventId();
-                                        Utils.log('🆔 Injected PageView event_id:', options.eventID);
+                                        // Use the stored PageView event_id if available, otherwise generate sync version
+                                        if (MetaTracker.currentPageViewEventId) {
+                                            options.eventID = MetaTracker.currentPageViewEventId;
+                                            Utils.log('🆔 Using stored PageView event_id for deduplication:', options.eventID);
+                                        } else {
+                                            options.eventID = Utils.generatePageViewEventIdSync();
+                                            Utils.log('🆔 Generated sync PageView event_id:', options.eventID);
+                                        }
                                     } else {
                                         // Fallback: try to generate from parameters
                                         const email = parameters && parameters.email ? parameters.email : null;
@@ -503,6 +554,7 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
     // Main tracker object
     const MetaTracker = {
         storedEventIds: new Map(),
+        currentPageViewEventId: null,
         
         isActionNetworkPage: function() {
             return window.location.href.includes('actionnetwork.org/forms/') ||
@@ -580,15 +632,25 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
             Utils.sendData(payload);
         },
         
-        sendPageView: function(providedEventId) {
+        sendPageView: async function(providedEventId) {
             console.log('[Meta Tracker] 👁️ Sending PageView event...');
             
+            // Enhanced browser data with more attribution signals
             const browserData = {
                 user_agent: navigator.userAgent,
                 language: navigator.language,
                 platform: navigator.platform,
                 screen_width: screen.width,
-                screen_height: screen.height
+                screen_height: screen.height,
+                viewport_width: window.innerWidth,
+                viewport_height: window.innerHeight,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                connection: navigator.connection ? navigator.connection.effectiveType : null,
+                device_pixel_ratio: window.devicePixelRatio || 1,
+                touch_support: 'ontouchstart' in window,
+                languages: navigator.languages ? navigator.languages.join(',') : navigator.language,
+                memory: navigator.deviceMemory || null,
+                hardware_concurrency: navigator.hardwareConcurrency || null
             };
             
             const fbData = Utils.getFacebookData();
@@ -596,11 +658,15 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
             const pageData = {
                 url: window.location.href,
                 referrer: document.referrer,
-                title: document.title
+                title: document.title,
+                domain: window.location.hostname
             };
             
-            // Use provided event_id or generate one
-            const pageViewId = providedEventId || Utils.generatePageViewEventId();
+            // Use provided event_id or generate one with enhanced algorithm
+            const pageViewId = providedEventId || await Utils.generatePageViewEventId();
+            
+            // Store the current PageView event_id for pixel enhancer
+            MetaTracker.currentPageViewEventId = pageViewId;
             
             const payload = {
                 event_type: 'PageView',
@@ -610,34 +676,20 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
                 browser_data: browserData,
                 fb_data: fbData,
                 page_data: pageData,
-                source: 'javascript_pixel_enhanced'
+                source: 'javascript_automatic_pageview'
             };
             
-            console.log('[Meta Tracker] 📦 PageView payload prepared:', payload);
+            console.log('[Meta Tracker] 📦 PageView payload prepared with enhanced event_id:', pageViewId);
             Utils.sendData(payload);
         },
         
-        sendCoordinatedPageView: function() {
-            console.log('[Meta Tracker] 🎯 Sending coordinated PageView (Pixel + Conversions API)...');
+        sendImmediatePageView: async function() {
+            console.log('[Meta Tracker] 🚀 Sending immediate PageView to Conversions API...');
             
-            // Generate single event_id for both Pixel and Conversions API
-            const pageViewEventId = Utils.generatePageViewEventId();
-            console.log('[Meta Tracker] 🆔 Generated PageView event_id for deduplication:', pageViewEventId);
+            // Send PageView immediately to CAPI without waiting for pixel
+            await this.sendPageView();
             
-            // Step 1: Fire Meta Pixel PageView with our event_id
-            if (typeof window.fbq === 'function') {
-                console.log('[Meta Tracker] 🔥 Firing Meta Pixel PageView with event_id:', pageViewEventId);
-                window.fbq('track', 'PageView', {}, { eventID: pageViewEventId });
-                console.log('[Meta Tracker] ✅ Meta Pixel PageView fired');
-            } else {
-                console.log('[Meta Tracker] ⚠️ No fbq function available for Pixel PageView');
-            }
-            
-            // Step 2: Send same PageView data + event_id to our server for Conversions API
-            console.log('[Meta Tracker] 📡 Sending PageView data to Conversions API with same event_id...');
-            this.sendPageView(pageViewEventId);
-            
-            console.log('[Meta Tracker] 🎉 Coordinated PageView complete - both Pixel and Conversions API will use same event_id for deduplication');
+            console.log('[Meta Tracker] ✅ Immediate PageView sent - pixel will use same event_id when detected');
         },
         
         sendCoordinatedPageViewWithoutEnhancement: function() {
@@ -858,7 +910,7 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
                         
                         if (enhancementSuccess) {
                             console.log('[Meta Tracker] ✅ Meta Pixel enhanced - event_ids will be injected automatically');
-                            MetaTracker.sendCoordinatedPageView();
+                            MetaTracker.sendImmediatePageView();
                         } else {
                             console.log('[Meta Tracker] ❌ Enhancement failed, falling back to unenhanced mode');
                             MetaTracker.sendCoordinatedPageViewWithoutEnhancement();
@@ -873,7 +925,7 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
                         const enhancementSuccess = PixelEnhancer.enhanceExistingPixel();
                         
                         if (enhancementSuccess) {
-                            MetaTracker.sendCoordinatedPageView();
+                            MetaTracker.sendImmediatePageView();
                         } else {
                             MetaTracker.sendCoordinatedPageViewWithoutEnhancement();
                         }
@@ -885,7 +937,7 @@ $apiEndpoint = $protocol . '://' . $domain . '/api.php';
                 } else {
                     console.log('[Meta Tracker] 📦 No existing Meta Pixel found after ' + maxAttempts + ' attempts');
                     PixelEnhancer.initializeBasicPixel();
-                    MetaTracker.sendCoordinatedPageView();
+                    MetaTracker.sendImmediatePageView();
                 }
             };
             
